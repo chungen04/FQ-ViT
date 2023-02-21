@@ -186,7 +186,7 @@ class Block(nn.Module):
             self.mlp(
                 self.qact3(
                     self.norm2(x, self.qact2.quantizer,
-                               self.qact3.quantizer)))))
+                               self.qact3.quantizer), get_integer = self.qact1.calibrate), input_quantizer = self.qact3.quantizer)))
         return x
 
 

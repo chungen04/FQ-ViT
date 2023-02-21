@@ -161,8 +161,13 @@ class Mlp(nn.Module):
                           quantizer_str=cfg.QUANTIZER_A)
         self.drop = nn.Dropout(drop)
 
-    def forward(self, x):
-        x = self.fc1(x)
+    def forward(self, x, input_quantizer = None):
+        if not self.fc1.calibrate and input_quantizer is not None:
+            # in this case, x is integer activation
+            x = self.fc1(x, input_scale = input_quantizer.scale, input_zero_point = input_quantizer.zero_point)
+        else:
+            x = self.fc1(x)
+        
         x = self.act(x)
         x = self.qact1(x)
         x = self.drop(x)

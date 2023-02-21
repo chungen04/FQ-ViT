@@ -39,7 +39,8 @@ class BaseQuantizer(nn.Module):
     def dequantize(self, inputs, scale=None, zero_point=None):
         raise NotImplementedError
 
-    def forward(self, inputs):
+    def forward(self, inputs, get_integer = False):
         outputs = self.quant(inputs)
-        outputs = self.dequantize(outputs)
+        if not get_integer:
+            outputs = self.dequantize(outputs)
         return outputs

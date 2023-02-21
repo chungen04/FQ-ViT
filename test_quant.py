@@ -33,7 +33,7 @@ parser.add_argument('--calib-batchsize',
                     help='batchsize of calibration set')
 parser.add_argument('--calib-iter', default=10, type=int)
 parser.add_argument('--val-batchsize',
-                    default=100,
+                    default=5,
                     type=int,
                     help='batchsize of validation set')
 parser.add_argument('--num-workers',

@@ -7,7 +7,6 @@ from .bit_type import BIT_TYPE_DICT
 from .observer import build_observer
 from .quantizer import build_quantizer
 
-
 class QConv2d(nn.Conv2d):
 
     def __init__(self,
@@ -69,7 +68,6 @@ class QConv2d(nn.Conv2d):
         return F.conv2d(x, weight, self.bias, self.stride, self.padding,
                         self.dilation, self.groups)
 
-
 class QLinear(nn.Linear):
 
     def __init__(self,
@@ -82,7 +80,8 @@ class QLinear(nn.Linear):
                  bit_type=BIT_TYPE_DICT['int8'],
                  calibration_mode='layer_wise',
                  observer_str='minmax',
-                 quantizer_str='uniform'):
+                 quantizer_str='uniform'
+                 ):
         super(QLinear, self).__init__(in_features, out_features, bias)
 
         self.quant = quant
@@ -98,15 +97,40 @@ class QLinear(nn.Linear):
                                        self.bit_type, self.calibration_mode)
         self.quantizer = build_quantizer(self.quantizer_str, self.bit_type,
                                          self.observer, self.module_type)
+        self.integer_weight = None
 
-    def forward(self, x):
+    def forward(self, x, integer_mul = False, input_scale = None, input_zero_point = None):
+        """
+            integer_mul means that the QLinear Layer performs integer multiplication
+            requantize is performed after this Layer if integer_mul is True
+        """
         if self.calibrate:
             self.quantizer.observer.update(self.weight)
             if self.last_calibrate:
                 self.quantizer.update_quantization_params(x)
         if not self.quant:
             return F.linear(x, self.weight, self.bias)
-        weight = self.quantizer(self.weight)
+        if not self.calibrate:
+            self.integer_weight = self.quantizer(inputs = self.weight, get_integer = True)
+
+        if integer_mul:
+            # integer_result = F.linear(x, self.integer_weight, None)
+            weight_scale = self.weight.quantizer.scale
+            weight_zp = self.weight.quantizer.zero_point
+            #input scale, input bias serve as arguments
+            dequant_result = weight_scale*input_scale*(
+                torch.matmul(x, self.integer_weight)
+                - torch.matmul(x, weight_zp*torch.ones(self.weight.shape))
+                - torch.matmul(input_zero_point*torch.ones(x.shape), self.weight)
+                + torch.matmul(input_zero_point*torch.ones(x.shape), weight_zp*torch.ones(self.weight.shape))
+            )
+            
+
+            # need to add back bias
+            fp_result = F.linear(dequant_result, nn.Identity(dequant_result.shape), self.bias)
+            return fp_result
+        else:
+            weight = self.quantizer(self.weight)
         return F.linear(x, weight, self.bias)
 
 
@@ -135,8 +159,9 @@ class QAct(nn.Module):
                                        self.bit_type, self.calibration_mode)
         self.quantizer = build_quantizer(self.quantizer_str, self.bit_type,
                                          self.observer, self.module_type)
+        self.integer_activation = None
 
-    def forward(self, x):
+    def forward(self, x, get_integer = False):
         if self.calibrate:
             self.quantizer.observer.update(x)
             if self.last_calibrate:
@@ -144,6 +169,10 @@ class QAct(nn.Module):
                 self.quantizer.update_quantization_params(x)
         if not self.quant:
             return x
+        if not self.calibrate:
+            self.integer_activation = self.quantizer(x, get_integer = True)
+        if get_integer:
+            return self.integer_activation
         x = self.quantizer(x)
         return x
 
